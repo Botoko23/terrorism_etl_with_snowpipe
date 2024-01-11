@@ -1,0 +1,126 @@
+CREATE DATABASE IF NOT EXISTS MyDB;
+USE DATABASE MyDB;
+CREATE SCHEMA IF NOT EXISTS test;
+CREATE OR REPLACE TRANSIENT TABLE myDB.test.terrorism_table (
+    iyear INT NULL,
+    imonth INT NULL,
+    iday INT NULL,
+    extended INT NULL,
+    resolution VARCHAR NULL,
+    country_txt VARCHAR NULL,
+    region_txt VARCHAR NULL,
+    provstate VARCHAR NULL,
+    city VARCHAR NULL,
+    latitude FLOAT NULL,
+    longitude FLOAT NULL,
+    summary TEXT NULL,
+    crit1 INT NULL,
+    crit2 INT NULL,
+    crit3 INT NULL,
+    doubtterr INT NULL,
+    success INT NULL,
+    suicide INT NULL,
+    attacktype1_txt VARCHAR NULL,
+    targtype1_txt VARCHAR NULL,
+    gname VARCHAR NULL,
+    motive VARCHAR NULL,
+    guncertain1 INT NULL,
+    individual INT NULL,
+    nperps FLOAT NULL,
+    nperpcap FLOAT NULL,
+    weaptype1_txt VARCHAR NULL,
+    weapsubtype1_txt VARCHAR NULL,
+    nkill INT NULL,
+    nkillus INT NULL,
+    nkillter INT NULL,
+    nwound INT NULL,
+    nwoundus INT NULL,
+    nwoundte INT NULL,
+    propvalue FLOAT NULL,
+    ishostkid INT NULL,
+    nhostkid INT NULL,
+    nhostkidus INT NULL,
+    nhours INT NULL,
+    ndays INT NULL,
+    ransom FLOAT NULL,
+    ransomamt FLOAT NULL,
+    ransompaid FLOAT NULL,
+    hostkidoutcome_txt VARCHAR NULL,
+    nreleased INT NULL,
+    idate DATE NULL
+);
+
+
+
+// Create storage integration object
+create or replace storage integration s3_int
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = S3
+  ENABLED = TRUE 
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::293449056871:role/snowflakeaccess'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://snowpipebucket-293449056871/output/')
+   COMMENT = 'This an optional comment' ;
+   
+   
+// See storage integration properties to fetch external_id so we can update it in S3
+DESC integration s3_int;
+
+
+
+// Create file format object
+CREATE OR REPLACE SCHEMA file_format_schema;
+CREATE OR REPLACE file format MyDB.file_format_schema.terrorism_file_format
+    type = 'CSV'
+    field_delimiter = '\t'
+    empty_field_as_null = TRUE
+    -- ERROR_ON_COLUMN_COUNT_MISMATCH = false
+    skip_header = 1;
+    
+ // Create stage object with integration object & file format object
+CREATE OR REPLACE SCHEMA external_stages;
+CREATE OR REPLACE stage MyDB.external_stages.test_csv
+    URL = 's3://snowpipebucket-293449056871/output/snowpipe'
+    STORAGE_INTEGRATION = s3_int
+    FILE_FORMAT = MyDB.file_format_schema.terrorism_file_format;
+
+list @MyDB.external_stages.test_csv;
+
+
+// Define pipe
+CREATE OR REPLACE SCHEMA MyDB.mypipes;
+
+CREATE OR REPLACE pipe MyDB.mypipes.terrorism_pipe
+auto_ingest = TRUE
+AS
+COPY INTO MyDB.test.terrorism_table 
+FROM @MyDB.external_stages.test_csv
+ON_ERROR = 'CONTINUE';
+
+// Describe pipe
+DESC pipe MyDB.mypipes.terrorism_pipe;
+
+// Handling errors
+
+
+ALTER PIPE MyDB.mypipes.terrorism_pipe refresh;
+ 
+// Validate pipe is actually working
+SELECT SYSTEM$PIPE_STATUS('MyDB.mypipes.terrorism_pipe');
+
+// Snowpipe error message
+-- SELECT * FROM TABLE(VALIDATE_PIPE_LOAD(
+--     PIPE_NAME => 'MyDB.mypipes.terrorism_pipe',
+--     START_TIME => DATEADD(MINUTE,-40,CURRENT_TIMESTAMP())));
+
+// COPY command history from table to see error massage
+
+SELECT * FROM TABLE (INFORMATION_SCHEMA.COPY_HISTORY(
+   table_name => 'MyDB.test.terrorism_table',
+   START_TIME => DATEADD(HOUR,-1,CURRENT_TIMESTAMP())));
+
+   
+
+
+SELECT COUNT(*) FROM MyDB.test.terrorism_table;
+
+TRUNCATE TABLE MyDB.test.terrorism_table;

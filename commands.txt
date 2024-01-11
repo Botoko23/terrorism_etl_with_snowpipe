@@ -1,0 +1,11 @@
+#commands to set up ec2 instance
+sudo apt update
+python3 --version
+sudo apt install python3-pip
+pip install pandas
+pip install boto3
+pip install snowflake-connector-python
+pip install apache-airflow
+airflow version
+airflow standalone
+
